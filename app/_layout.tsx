@@ -7,6 +7,9 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { migrateDbIfNeeded } from '@/lib/db';
 
+// Database file stored persistently on device (not in-memory)
+const DATABASE_FILE = 'cardoptimizer.db';
+
 export const unstable_settings = {
   anchor: '(tabs)',
 };
@@ -15,7 +18,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <SQLiteProvider databaseName="cardoptimizer.db" onInit={migrateDbIfNeeded}>
+    <SQLiteProvider databaseName={DATABASE_FILE} onInit={migrateDbIfNeeded}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

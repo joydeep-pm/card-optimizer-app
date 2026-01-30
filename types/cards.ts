@@ -12,7 +12,8 @@ export type CardCategory =
   | 'premium'
   | 'everyday'
   | 'gas'
-  | 'groceries';
+  | 'groceries'
+  | 'fuel';
 
 export interface CardOffer {
   id: number;

@@ -74,9 +74,14 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ThemedView style={styles.header}>
-        <ThemedText type="title" style={styles.title}>
-          Card Optimizer
-        </ThemedText>
+        <ThemedView style={styles.titleRow}>
+          <ThemedText type="title" style={styles.title}>
+            Card Optimizer
+          </ThemedText>
+          <ThemedView style={styles.offlineBadge}>
+            <ThemedText style={styles.offlineBadgeText}>No Connection Needed</ThemedText>
+          </ThemedView>
+        </ThemedView>
         <ThemedText type="default" style={styles.subtitle}>
           Search and filter credit card offers
         </ThemedText>
@@ -271,8 +276,25 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
   title: {
     marginBottom: 4,
+  },
+  offlineBadge: {
+    backgroundColor: '#2E7D32',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  offlineBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
   },
   subtitle: {
     opacity: 0.8,

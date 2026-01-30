@@ -7,7 +7,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { CardOffer } from '@/types/cards';
 import { SEED_OFFERS, MERCHANT_RULES } from './seedData';
 
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   await db.execAsync("PRAGMA journal_mode = 'wal'");
@@ -19,8 +19,8 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
 
   if (currentVersion >= DATABASE_VERSION) return;
 
-  // Force fresh start for version 3 to ensure new seed data
-  if (currentVersion < 3) {
+  // Force fresh start to ensure new seed data
+  if (currentVersion < 4) {
     // Drop existing tables to reset with new data
     await db.execAsync(`
       DROP TABLE IF EXISTS merchant_rules;
@@ -28,7 +28,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
     `);
   }
 
-  if (currentVersion < 3) {
+  if (currentVersion < 4) {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS card_offers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
