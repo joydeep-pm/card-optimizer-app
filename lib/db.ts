@@ -7,7 +7,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { CardOffer } from '@/types/cards';
 import { SEED_OFFERS, MERCHANT_RULES } from './seedData';
 
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 6;
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   await db.execAsync("PRAGMA journal_mode = 'wal'");
@@ -20,15 +20,15 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
   if (currentVersion >= DATABASE_VERSION) return;
 
   // Force fresh start to ensure new seed data
-  if (currentVersion < 4) {
-    // Drop existing tables to reset with new data
+  if (currentVersion < 6) {
+    // Drop existing tables to reset with curated card data
     await db.execAsync(`
       DROP TABLE IF EXISTS merchant_rules;
       DROP TABLE IF EXISTS card_offers;
     `);
   }
 
-  if (currentVersion < 4) {
+  if (currentVersion < 6) {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS card_offers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +51,7 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
 
     await seedCardOffers(db);
 
-    // Add merchant_rules table for Smart Search
+    // Add merchant_rules table for Smart Search with effective_yield for ranking
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS merchant_rules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,12 +60,14 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase): Promise<void> {
         reward_value REAL NOT NULL,
         reward_unit TEXT NOT NULL DEFAULT '%',
         notes TEXT,
+        effective_yield REAL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (card_id) REFERENCES card_offers(id)
       );
 
       CREATE INDEX IF NOT EXISTS idx_merchant_rules_merchant ON merchant_rules(merchant);
       CREATE INDEX IF NOT EXISTS idx_merchant_rules_card_id ON merchant_rules(card_id);
+      CREATE INDEX IF NOT EXISTS idx_merchant_rules_yield ON merchant_rules(effective_yield);
     `);
 
     await seedMerchantRules(db);
@@ -99,8 +101,8 @@ async function seedCardOffers(db: SQLiteDatabase): Promise<void> {
 
 async function seedMerchantRules(db: SQLiteDatabase): Promise<void> {
   const stmt = await db.prepareAsync(
-    `INSERT INTO merchant_rules (merchant, card_id, reward_value, reward_unit, notes)
-     VALUES ($merchant, $card_id, $reward_value, $reward_unit, $notes)`
+    `INSERT INTO merchant_rules (merchant, card_id, reward_value, reward_unit, notes, effective_yield)
+     VALUES ($merchant, $card_id, $reward_value, $reward_unit, $notes, $effective_yield)`
   );
   try {
     for (const rule of MERCHANT_RULES) {
@@ -116,6 +118,7 @@ async function seedMerchantRules(db: SQLiteDatabase): Promise<void> {
           $reward_value: rule.rewardValue,
           $reward_unit: rule.rewardUnit,
           $notes: rule.notes ?? null,
+          $effective_yield: rule.effectiveYield ?? null,
         });
       }
     }

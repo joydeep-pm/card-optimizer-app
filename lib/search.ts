@@ -33,6 +33,7 @@ function rowToCardOfferWithMerchant(row: Record<string, unknown>): CardOfferWith
 
 /**
  * Smart Search: searches for merchant-specific rewards first, then falls back to regular search.
+ * Prioritizes cards by effective yield (e.g., 72% for HSBC Premier on Hotels).
  * Returns cards with merchant-specific reward info and marks the best choice.
  */
 export async function smartSearch(
@@ -43,25 +44,54 @@ export async function smartSearch(
 
   // First, check if query matches a merchant with specific rules
   if (query) {
+    // Priority check for high-yield hotel searches (HSBC Premier 72% yield)
+    const isHotelSearch = /hotel|accor|novotel|sofitel|ibis|mercure|fairmont|stay|accommodation/i.test(query);
+
     const merchantCards = await db.getAllAsync<Record<string, unknown>>(
       `SELECT
         c.*,
         m.reward_value as merchant_reward_value,
         m.reward_unit as merchant_reward_unit,
         m.notes as merchant_notes,
-        CASE WHEN m.reward_value = (
-          SELECT MAX(m2.reward_value) FROM merchant_rules m2
+        COALESCE(m.effective_yield, m.reward_value) as effective_yield,
+        CASE WHEN COALESCE(m.effective_yield, m.reward_value) = (
+          SELECT MAX(COALESCE(m2.effective_yield, m2.reward_value)) FROM merchant_rules m2
           WHERE m2.merchant LIKE $merchant
         ) THEN 1 ELSE 0 END as is_best_choice
       FROM merchant_rules m
       JOIN card_offers c ON c.id = m.card_id
       WHERE m.merchant LIKE $merchant
-      ORDER BY m.reward_value DESC, c.annual_fee ASC`,
+      ORDER BY COALESCE(m.effective_yield, m.reward_value) DESC, c.annual_fee ASC`,
       { $merchant: `%${query}%` }
     );
 
+    // If it's a hotel search but no specific merchant match, search for "Hotels" rules
+    if (merchantCards.length === 0 && isHotelSearch) {
+      const hotelCards = await db.getAllAsync<Record<string, unknown>>(
+        `SELECT
+          c.*,
+          m.reward_value as merchant_reward_value,
+          m.reward_unit as merchant_reward_unit,
+          m.notes as merchant_notes,
+          COALESCE(m.effective_yield, m.reward_value) as effective_yield,
+          CASE WHEN COALESCE(m.effective_yield, m.reward_value) = (
+            SELECT MAX(COALESCE(m2.effective_yield, m2.reward_value)) FROM merchant_rules m2
+            WHERE m2.merchant = 'Hotels'
+          ) THEN 1 ELSE 0 END as is_best_choice
+        FROM merchant_rules m
+        JOIN card_offers c ON c.id = m.card_id
+        WHERE m.merchant = 'Hotels'
+        ORDER BY COALESCE(m.effective_yield, m.reward_value) DESC, c.annual_fee ASC`,
+        {}
+      );
+
+      if (hotelCards.length > 0) {
+        return hotelCards.map(rowToCardOfferWithMerchant);
+      }
+    }
+
     if (merchantCards.length > 0) {
-      // We found merchant-specific rules
+      // We found merchant-specific rules - prioritize by effective yield
       const results = merchantCards.map(rowToCardOfferWithMerchant);
 
       // Also include other cards that mention this merchant in best_for but don't have specific rules
@@ -121,11 +151,11 @@ export async function searchCards(
     conditions.push('reward_type = $reward_type');
     params.$reward_type = filters.reward_type;
   }
-  if (filters.max_annual_fee != null && filters.max_annual_fee !== '') {
+  if (filters.max_annual_fee != null) {
     conditions.push('annual_fee <= $max_annual_fee');
     params.$max_annual_fee = filters.max_annual_fee;
   }
-  if (filters.min_reward_rate != null && filters.min_reward_rate !== '') {
+  if (filters.min_reward_rate != null) {
     conditions.push('reward_rate >= $min_reward_rate');
     params.$min_reward_rate = filters.min_reward_rate;
   }

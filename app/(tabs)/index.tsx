@@ -1,433 +1,617 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
+  TouchableWithoutFeedback,
+  View,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
+import { CardView } from '@/components/CardView';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useCardsDb } from '@/hooks/use-cards-db';
-import type { CardOfferWithMerchantReward, CardCategory, RewardType, SearchFilters } from '@/types/cards';
+import type { CardOfferWithMerchantReward, SearchFilters } from '@/types/cards';
 
-const REWARD_TYPES: { value: RewardType; label: string }[] = [
-  { value: 'points', label: 'Points' },
-  { value: 'cashback', label: 'Cashback' },
-  { value: 'miles', label: 'Miles' },
-];
+/**
+ * GlowingVerdict - Animated glow wrapper for the winning card
+ */
+function GlowingVerdict({ card }: { card: CardOfferWithMerchantReward }) {
+  const glowOpacity = useSharedValue(0.3);
+  const glowScale = useSharedValue(1);
 
+  useEffect(() => {
+    glowOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0.6, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.3, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+    glowScale.value = withRepeat(
+      withSequence(
+        withTiming(1.02, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+  }, [glowOpacity, glowScale]);
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
+    transform: [{ scale: glowScale.value }],
+  }));
+
+  return (
+    <View style={glowStyles.container}>
+      {/* Outer glow */}
+      <Animated.View style={[glowStyles.glowOuter, glowStyle]} />
+      {/* Card */}
+      <Animated.View entering={FadeInDown.duration(500).delay(200)} style={glowStyles.cardWrapper}>
+        <CardView card={{ ...card, isBestChoice: true }} />
+      </Animated.View>
+    </View>
+  );
+}
+
+const glowStyles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  glowOuter: {
+    position: 'absolute',
+    top: -24,
+    left: -24,
+    right: -24,
+    bottom: -24,
+    borderRadius: BorderRadius.card + 24,
+    backgroundColor: '#00FF85',
+  },
+  cardWrapper: {
+    position: 'relative',
+    zIndex: 1,
+  },
+});
+
+/**
+ * HomeScreen - Verdict-First UI
+ * Progressive disclosure: Giant search → Single verdict card
+ */
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const { smartSearch, categories, isReady } = useCardsDb();
+  const { smartSearch, isReady } = useCardsDb();
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<CardCategory | ''>('');
-  const [rewardType, setRewardType] = useState<RewardType | ''>('');
-  const [maxFee, setMaxFee] = useState('');
   const [results, setResults] = useState<CardOfferWithMerchantReward[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+
+  // The winning verdict
+  const verdict = results.length > 0 ? results[0] : null;
 
   const runSearch = useCallback(async () => {
+    if (!query.trim()) {
+      setResults([]);
+      setHasSearched(false);
+      return;
+    }
+
     setLoading(true);
+    setHasSearched(true);
     try {
       const filters: SearchFilters = {
-        query: query.trim() || undefined,
-        category: category || undefined,
-        reward_type: rewardType || undefined,
-        max_annual_fee: maxFee !== '' ? parseInt(maxFee, 10) : undefined,
+        query: query.trim(),
       };
-      if (filters.max_annual_fee != null && isNaN(filters.max_annual_fee)) {
-        delete filters.max_annual_fee;
-      }
       const list = await smartSearch(filters);
       setResults(list);
     } finally {
       setLoading(false);
     }
-  }, [query, category, rewardType, maxFee, smartSearch]);
+  }, [query, smartSearch]);
 
-  // Auto-search as user types (debounced)
+  // Auto-search with debounce
   useEffect(() => {
     if (!isReady) return;
     const timer = setTimeout(() => {
       runSearch();
-    }, 300);
+    }, 400);
     return () => clearTimeout(timer);
-  }, [query, category, rewardType, maxFee, isReady, runSearch]);
+  }, [query, isReady, runSearch]);
 
-  const colors = Colors[colorScheme ?? 'light'];
-  const isDark = colorScheme === 'dark';
+  const dismissKeyboard = useCallback(() => {
+    Keyboard.dismiss();
+  }, []);
 
+  const clearSearch = useCallback(() => {
+    setQuery('');
+    setResults([]);
+    setHasSearched(false);
+    inputRef.current?.focus();
+  }, []);
+
+  // Loading state
   if (!isReady) {
     return (
-      <ThemedView style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.tint} />
-        <ThemedText style={styles.loadingText}>Loading database…</ThemedText>
-      </ThemedView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#00FF85" />
+        <ThemedText style={styles.loadingText} numberOfLines={1}>
+          Initializing Yield Engine…
+        </ThemedText>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ThemedView style={styles.header}>
-        <ThemedView style={styles.titleRow}>
-          <ThemedText type="title" style={styles.title}>
-            Card Optimizer
-          </ThemedText>
-          <ThemedView style={styles.offlineBadge}>
-            <ThemedText style={styles.offlineBadgeText}>No Connection Needed</ThemedText>
-          </ThemedView>
-        </ThemedView>
-        <ThemedText type="default" style={styles.subtitle}>
-          Search and filter credit card offers
-        </ThemedText>
-      </ThemedView>
-
-      <ThemedView style={styles.searchSection}>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: isDark ? '#2a2a2a' : '#f0f0f0',
-              color: colors.text,
-              borderColor: isDark ? '#444' : '#ddd',
-            },
-          ]}
-          placeholder="Search by name, issuer, or best for…"
-          placeholderTextColor={colors.icon}
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={runSearch}
-          returnKeyType="search"
-        />
-
-        <ThemedText type="defaultSemiBold" style={styles.filterLabel}>
-          Category
-        </ThemedText>
-        <FlatList
-          horizontal
-          data={[{ value: '', label: 'All' }, ...categories.map((c) => ({ value: c, label: c }))]}
-          keyExtractor={(item) => item.value || 'all'}
-          renderItem={({ item }) => {
-            const active = category === item.value;
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.chip,
-                  active && styles.chipActive,
-                  active && { backgroundColor: colors.tint },
-                ]}
-                onPress={() => setCategory(item.value as CardCategory | '')}
-              >
-                <ThemedText style={[styles.chipText, active && styles.chipTextActive]}>
-                  {item.label}
-                </ThemedText>
-              </TouchableOpacity>
-            );
-          }}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipList}
-        />
-
-        <ThemedText type="defaultSemiBold" style={styles.filterLabel}>
-          Reward type
-        </ThemedText>
-        <ThemedView style={styles.chipRow}>
-          <TouchableOpacity
-            style={[
-              styles.chip,
-              !rewardType && styles.chipActive,
-              !rewardType && { backgroundColor: colors.tint },
-            ]}
-            onPress={() => setRewardType('')}
-          >
-            <ThemedText style={[styles.chipText, !rewardType && styles.chipTextActive]}>All</ThemedText>
-          </TouchableOpacity>
-          {REWARD_TYPES.map((item) => {
-            const active = rewardType === item.value;
-            return (
-              <TouchableOpacity
-                key={item.value}
-                style={[
-                  styles.chip,
-                  active && styles.chipActive,
-                  active && { backgroundColor: colors.tint },
-                ]}
-                onPress={() => setRewardType(rewardType === item.value ? '' : item.value)}
-              >
-                <ThemedText style={[styles.chipText, active && styles.chipTextActive]}>
-                  {item.label}
-                </ThemedText>
-              </TouchableOpacity>
-            );
-          })}
-        </ThemedView>
-
-        <ThemedText type="defaultSemiBold" style={styles.filterLabel}>
-          Max annual fee (optional)
-        </ThemedText>
-        <TextInput
-          style={[
-            styles.inputSmall,
-            {
-              backgroundColor: isDark ? '#2a2a2a' : '#f0f0f0',
-              color: colors.text,
-              borderColor: isDark ? '#444' : '#ddd',
-            },
-          ]}
-          placeholder="e.g. 95"
-          placeholderTextColor={colors.icon}
-          value={maxFee}
-          onChangeText={setMaxFee}
-          keyboardType="number-pad"
-        />
-
-        <TouchableOpacity
-          style={[styles.searchButton, { backgroundColor: colors.tint }]}
-          onPress={runSearch}
-          disabled={loading}
+    <TouchableWithoutFeedback onPress={dismissKeyboard}>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardView}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <ThemedText style={styles.searchButtonText}>Search</ThemedText>
-          )}
-        </TouchableOpacity>
-      </ThemedView>
+          {/* Header */}
+          <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
+            <View style={styles.titleRow}>
+              <ThemedText style={styles.title} numberOfLines={1}>
+                Card
+              </ThemedText>
+              <ThemedText style={styles.titleAccent} numberOfLines={1}>
+                Optimizer
+              </ThemedText>
+            </View>
+            <ThemedText style={styles.tagline} numberOfLines={1}>
+              Find your highest-yield card instantly
+            </ThemedText>
+          </Animated.View>
 
-      <ThemedView style={styles.resultsSection}>
-        <ThemedText type="subtitle" style={styles.resultsTitle}>
-          Results ({results.length})
-        </ThemedText>
-        <FlatList
-          data={results}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <ThemedView
-              style={[
-                styles.cardRow,
-                item.isBestChoice && styles.bestChoiceCard,
-              ]}
-            >
-              {item.isBestChoice && (
-                <ThemedView style={styles.bestChoiceBadge}>
-                  <ThemedText style={styles.bestChoiceText}>Best Choice</ThemedText>
-                </ThemedView>
-              )}
-              <ThemedText type="defaultSemiBold" style={styles.cardName}>
-                {item.name}
-              </ThemedText>
-              <ThemedText type="default" style={styles.cardIssuer}>
-                {item.issuer} · {item.reward_type} · {item.reward_rate}%
-              </ThemedText>
-              {item.merchantRewardValue != null && (
-                <ThemedText type="defaultSemiBold" style={styles.merchantReward}>
-                  {item.merchantRewardValue}{item.merchantRewardUnit} on this merchant
+          {/* Search Section */}
+          <Animated.View
+            entering={FadeInDown.duration(500).delay(100)}
+            style={styles.searchSection}
+          >
+            <View style={styles.searchContainer}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
+                style={styles.searchGradient}
+              >
+                <View style={styles.searchInputWrapper}>
+                  <ThemedText style={styles.searchIcon}>🔍</ThemedText>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.searchInput}
+                    placeholder="Hotels, Flights, Amazon, Ola…"
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    value={query}
+                    onChangeText={setQuery}
+                    onSubmitEditing={runSearch}
+                    returnKeyType="search"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {query.length > 0 && (
+                    <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                      <ThemedText style={styles.clearIcon}>✕</ThemedText>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </LinearGradient>
+            </View>
+
+            {/* Quick suggestions */}
+            {!hasSearched && (
+              <Animated.View entering={FadeIn.delay(300)} style={styles.suggestions}>
+                <ThemedText style={styles.suggestionsLabel} numberOfLines={1}>
+                  Try searching for
                 </ThemedText>
-              )}
-              {item.merchantNotes && (
-                <ThemedText type="default" style={styles.merchantNotes}>
-                  {item.merchantNotes}
+                <View style={styles.suggestionChips}>
+                  {['Hotels', 'Flights', 'BigBasket', 'Ola'].map((suggestion) => (
+                    <TouchableOpacity
+                      key={suggestion}
+                      style={styles.suggestionChip}
+                      onPress={() => setQuery(suggestion)}
+                    >
+                      <ThemedText style={styles.suggestionText} numberOfLines={1}>
+                        {suggestion}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </Animated.View>
+            )}
+          </Animated.View>
+
+          {/* Results Section */}
+          <View style={styles.resultsSection}>
+            {loading ? (
+              <View style={styles.loadingResults}>
+                <ActivityIndicator size="large" color="#00FF85" />
+                <ThemedText style={styles.loadingResultsText} numberOfLines={1}>
+                  Analyzing yields…
                 </ThemedText>
-              )}
-              <ThemedText type="default" style={styles.cardFee}>
-                Annual fee: {item.annual_fee > 1000 ? `₹${item.annual_fee.toLocaleString()}` : `$${item.annual_fee}`} · {item.signup_bonus}
-              </ThemedText>
-              {item.best_for ? (
-                <ThemedText type="default" style={styles.cardBestFor}>
-                  Best for: {item.best_for}
+              </View>
+            ) : verdict ? (
+              <Animated.View
+                entering={FadeInDown.duration(400)}
+                exiting={FadeOut.duration(200)}
+                style={styles.verdictSection}
+              >
+                {/* Verdict Header */}
+                <View style={styles.verdictHeader}>
+                  <View style={styles.verdictLabelRow}>
+                    <View style={styles.verdictDot} />
+                    <ThemedText style={styles.verdictLabel} numberOfLines={1}>
+                      THE VERDICT
+                    </ThemedText>
+                  </View>
+                  <View style={styles.resultsBadge}>
+                    <ThemedText style={styles.resultsBadgeText} numberOfLines={1}>
+                      {results.length} analyzed
+                    </ThemedText>
+                  </View>
+                </View>
+
+                {/* The Verdict Card */}
+                <GlowingVerdict card={verdict} />
+
+                {/* Verdict footer */}
+                <ThemedText style={styles.verdictFooter} numberOfLines={2}>
+                  Highest effective yield for "{query}"
                 </ThemedText>
-              ) : null}
-            </ThemedView>
-          )}
-          ListEmptyComponent={
-            !loading ? (
-              <ThemedText style={styles.emptyText}>
-                Run a search or clear filters to see all cards.
-              </ThemedText>
-            ) : null
-          }
-          contentContainerStyle={results.length === 0 ? styles.emptyList : undefined}
-        />
-      </ThemedView>
-    </SafeAreaView>
+              </Animated.View>
+            ) : hasSearched ? (
+              <Animated.View
+                entering={FadeIn.duration(300)}
+                style={styles.emptyState}
+              >
+                <ThemedText style={styles.emptyIcon}>🔎</ThemedText>
+                <ThemedText style={styles.emptyText} numberOfLines={2}>
+                  No matching cards found.
+                </ThemedText>
+                <ThemedText style={styles.emptySubtext} numberOfLines={2}>
+                  Try searching for a merchant, category, or card name.
+                </ThemedText>
+              </Animated.View>
+            ) : (
+              <Animated.View
+                entering={FadeIn.delay(400)}
+                style={styles.welcomeState}
+              >
+                <View style={styles.welcomeContent}>
+                  <ThemedText style={styles.welcomeEmoji}>💳</ThemedText>
+                  <ThemedText style={styles.welcomeTitle} numberOfLines={2}>
+                    Enter a merchant or category above
+                  </ThemedText>
+                  <ThemedText style={styles.welcomeSubtext} numberOfLines={3}>
+                    We'll find the card with the highest effective yield from your portfolio.
+                  </ThemedText>
+                </View>
+
+                {/* Portfolio indicator */}
+                <View style={styles.portfolioIndicator}>
+                  <ThemedText style={styles.portfolioLabel} numberOfLines={1}>
+                    8 PREMIUM CARDS IN PORTFOLIO
+                  </ThemedText>
+                  <View style={styles.portfolioDots}>
+                    {[...Array(8)].map((_, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.portfolioDot,
+                          { backgroundColor: i % 2 === 0 ? '#00FF85' : '#7000FF' },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </Animated.View>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000000',
   },
-  centered: {
+
+  keyboardView: {
     flex: 1,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
+
   loadingText: {
-    marginTop: 8,
+    ...Typography.bodyMedium,
+    color: 'rgba(255,255,255,0.5)',
   },
+
+  // Header
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
+
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    marginBottom: Spacing.xs,
   },
+
   title: {
-    marginBottom: 4,
+    ...Typography.headlineLarge,
+    color: '#FFFFFF',
+    marginRight: Spacing.sm,
   },
-  offlineBadge: {
-    backgroundColor: '#2E7D32',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+
+  titleAccent: {
+    ...Typography.headlineLarge,
+    color: '#00FF85',
   },
-  offlineBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
+
+  tagline: {
+    ...Typography.bodyMedium,
+    color: 'rgba(255,255,255,0.5)',
   },
-  subtitle: {
-    opacity: 0.8,
-  },
+
+  // Search
   searchSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#333',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
   },
-  input: {
-    height: 44,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    marginBottom: 12,
+
+  searchContainer: {
+    borderRadius: BorderRadius.input,
+    overflow: 'hidden',
     borderWidth: 1,
-    fontSize: 16,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  inputSmall: {
-    height: 40,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    fontSize: 16,
-    maxWidth: 120,
+
+  searchGradient: {
+    padding: 2,
   },
-  filterLabel: {
-    marginBottom: 6,
-  },
-  chipList: {
+
+  searchInputWrapper: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: BorderRadius.input - 2,
+    paddingHorizontal: Spacing.md,
+    height: 56,
   },
-  chipRow: {
+
+  searchIcon: {
+    fontSize: 20,
+    marginRight: Spacing.sm,
+  },
+
+  searchInput: {
+    flex: 1,
+    ...Typography.bodyLarge,
+    color: '#FFFFFF',
+    height: '100%',
+  },
+
+  clearButton: {
+    padding: Spacing.sm,
+    marginLeft: Spacing.sm,
+  },
+
+  clearIcon: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.5)',
+  },
+
+  // Suggestions
+  suggestions: {
+    marginTop: Spacing.md,
+  },
+
+  suggestionsLabel: {
+    ...Typography.labelSmall,
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: Spacing.sm,
+  },
+
+  suggestionChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: Spacing.sm,
   },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(128,128,128,0.25)',
+
+  suggestionChip: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.badge,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  chipActive: {},
-  chipText: {
-    fontSize: 14,
+
+  suggestionText: {
+    ...Typography.bodySmall,
+    color: 'rgba(255,255,255,0.7)',
   },
-  chipTextActive: {
-    color: '#fff',
-  },
-  searchButton: {
-    height: 44,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
+  // Results
   resultsSection: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: Spacing.lg,
   },
-  resultsTitle: {
-    marginBottom: 12,
+
+  loadingResults: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
-  cardRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#333',
-    borderRadius: 12,
-    marginBottom: 8,
+
+  loadingResultsText: {
+    ...Typography.bodyMedium,
+    color: 'rgba(255,255,255,0.5)',
   },
-  bestChoiceCard: {
-    borderWidth: 2,
-    borderColor: '#FFD700',
-    backgroundColor: 'rgba(255, 215, 0, 0.08)',
+
+  // Verdict
+  verdictSection: {
+    flex: 1,
+    paddingTop: Spacing.sm,
   },
-  bestChoiceBadge: {
-    backgroundColor: '#FFD700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
+
+  verdictHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
   },
-  bestChoiceText: {
-    color: '#000',
-    fontSize: 12,
-    fontWeight: '700',
+
+  verdictLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  merchantReward: {
-    fontSize: 14,
-    color: '#FFD700',
-    marginTop: 4,
+
+  verdictDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#00FF85',
+    marginRight: Spacing.sm,
   },
-  merchantNotes: {
-    fontSize: 12,
-    opacity: 0.8,
-    fontStyle: 'italic',
-    marginTop: 2,
+
+  verdictLabel: {
+    ...Typography.labelMedium,
+    color: '#00FF85',
+    letterSpacing: 2,
   },
-  cardName: {
-    fontSize: 16,
-    marginBottom: 4,
+
+  resultsBadge: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.badge,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  cardIssuer: {
-    fontSize: 14,
-    opacity: 0.9,
-    marginBottom: 2,
+
+  resultsBadgeText: {
+    ...Typography.labelSmall,
+    color: 'rgba(255,255,255,0.5)',
   },
-  cardFee: {
-    fontSize: 13,
-    opacity: 0.8,
-    marginBottom: 2,
+
+  verdictFooter: {
+    ...Typography.bodySmall,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    marginTop: Spacing.lg,
   },
-  cardBestFor: {
-    fontSize: 13,
-    opacity: 0.7,
+
+  // Empty state
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
   },
-  emptyList: {
-    flexGrow: 1,
+
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: Spacing.md,
   },
+
   emptyText: {
-    opacity: 0.7,
-    marginTop: 24,
+    ...Typography.headlineSmall,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+
+  emptySubtext: {
+    ...Typography.bodyMedium,
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+  },
+
+  // Welcome state
+  welcomeState: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xl,
+  },
+
+  welcomeContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+
+  welcomeEmoji: {
+    fontSize: 64,
+    marginBottom: Spacing.lg,
+  },
+
+  welcomeTitle: {
+    ...Typography.headlineSmall,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+
+  welcomeSubtext: {
+    ...Typography.bodyMedium,
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+
+  // Portfolio indicator
+  portfolioIndicator: {
+    alignItems: 'center',
+    paddingTop: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+  },
+
+  portfolioLabel: {
+    ...Typography.labelSmall,
+    color: 'rgba(255,255,255,0.3)',
+    marginBottom: Spacing.sm,
+  },
+
+  portfolioDots: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+
+  portfolioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });

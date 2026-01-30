@@ -1,112 +1,377 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
+import { useCardsDb } from '@/hooks/use-cards-db';
+import type { CardOfferWithMerchantReward } from '@/types/cards';
 
-export default function TabTwoScreen() {
+// Brand colors for card badges
+const BRAND_COLORS: Record<string, string> = {
+  'American Express': '#006FCF',
+  'Amex': '#006FCF',
+  'HSBC': '#DB0011',
+  'HDFC': '#004C8F',
+  'ICICI': '#F58220',
+  'SBI': '#22409A',
+  'Axis': '#97144D',
+  'Tata': '#1A1F71',
+};
+
+function getBrandColor(issuer: string): string {
+  const normalizedIssuer = issuer.toLowerCase();
+  for (const [brand, color] of Object.entries(BRAND_COLORS)) {
+    if (normalizedIssuer.includes(brand.toLowerCase())) {
+      return color;
+    }
+  }
+  return '#444444';
+}
+
+/**
+ * PortfolioCard - Compact card display for the portfolio grid
+ */
+function PortfolioCard({ card, index }: { card: CardOfferWithMerchantReward; index: number }) {
+  const brandColor = getBrandColor(card.issuer);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
+    <Animated.View
+      entering={FadeInDown.duration(400).delay(index * 100)}
+      style={styles.portfolioCard}
+    >
+      <LinearGradient
+        colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']}
+        style={styles.portfolioCardGradient}
+      >
+        {/* Brand indicator */}
+        <View style={[styles.brandIndicator, { backgroundColor: brandColor }]} />
+
+        {/* Card content */}
+        <View style={styles.portfolioCardContent}>
+          <View style={styles.portfolioCardHeader}>
+            <ThemedText style={styles.issuerLabel} numberOfLines={1}>
+              {card.issuer}
             </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+            <View style={styles.yieldBadge}>
+              <ThemedText style={styles.yieldBadgeText} numberOfLines={1}>
+                {card.reward_rate}%
+              </ThemedText>
+            </View>
+          </View>
+
+          <ThemedText style={styles.cardNameSmall} numberOfLines={2}>
+            {card.name}
+          </ThemedText>
+
+          <View style={styles.portfolioCardFooter}>
+            <ThemedText style={styles.feeLabel} numberOfLines={1}>
+              {card.annual_fee === 0 ? 'FREE' : `₹${card.annual_fee.toLocaleString('en-IN')}`}
+            </ThemedText>
+            <ThemedText style={styles.typeLabel} numberOfLines={1}>
+              {card.reward_type}
+            </ThemedText>
+          </View>
+        </View>
+      </LinearGradient>
+    </Animated.View>
+  );
+}
+
+/**
+ * PortfolioScreen - Shows all 8 premium cards in the portfolio
+ */
+export default function PortfolioScreen() {
+  const { searchCards, isReady } = useCardsDb();
+  const [cards, setCards] = useState<CardOfferWithMerchantReward[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    async function loadPortfolio() {
+      setLoading(true);
+      try {
+        const allCards = await searchCards({});
+        setCards(allCards);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadPortfolio();
+  }, [isReady, searchCards]);
+
+  if (!isReady || loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#00FF85" />
+        <ThemedText style={styles.loadingText} numberOfLines={1}>
+          Loading portfolio…
+        </ThemedText>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.titleRow}>
+          <ThemedText style={styles.title} numberOfLines={1}>
+            Your
+          </ThemedText>
+          <ThemedText style={styles.titleAccent} numberOfLines={1}>
+            Portfolio
+          </ThemedText>
+        </View>
+        <ThemedText style={styles.subtitle} numberOfLines={1}>
+          {cards.length} premium cards optimized for yield
+        </ThemedText>
+      </View>
+
+      {/* Stats Bar */}
+      <View style={styles.statsBar}>
+        <View style={styles.statItem}>
+          <ThemedText style={styles.statValue} numberOfLines={1}>
+            {cards.length}
+          </ThemedText>
+          <ThemedText style={styles.statLabel} numberOfLines={1}>
+            CARDS
+          </ThemedText>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <ThemedText style={styles.statValue} numberOfLines={1}>
+            72%
+          </ThemedText>
+          <ThemedText style={styles.statLabel} numberOfLines={1}>
+            MAX YIELD
+          </ThemedText>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <ThemedText style={styles.statValue} numberOfLines={1}>
+            ₹0
+          </ThemedText>
+          <ThemedText style={styles.statLabel} numberOfLines={1}>
+            MIN FEE
+          </ThemedText>
+        </View>
+      </View>
+
+      {/* Cards Grid */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.cardsGrid}>
+          {cards.map((card, index) => (
+            <PortfolioCard key={card.id} card={card} index={index} />
+          ))}
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <ThemedText style={styles.footerText} numberOfLines={2}>
+            Search for a merchant on the Optimize tab to find the best card for your spend.
+          </ThemedText>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
   },
-  titleContainer: {
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+
+  loadingText: {
+    ...Typography.bodyMedium,
+    color: 'rgba(255,255,255,0.5)',
+  },
+
+  // Header
+  header: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
+  },
+
+  titleRow: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'baseline',
+    marginBottom: Spacing.xs,
+  },
+
+  title: {
+    ...Typography.headlineLarge,
+    color: '#FFFFFF',
+    marginRight: Spacing.sm,
+  },
+
+  titleAccent: {
+    ...Typography.headlineLarge,
+    color: '#7000FF',
+  },
+
+  subtitle: {
+    ...Typography.bodyMedium,
+    color: 'rgba(255,255,255,0.5)',
+  },
+
+  // Stats Bar
+  statsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: BorderRadius.container,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  statValue: {
+    ...Typography.headlineMedium,
+    color: '#00FF85',
+  },
+
+  statLabel: {
+    ...Typography.labelSmall,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 2,
+  },
+
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+
+  // Scroll
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xxl,
+  },
+
+  // Cards Grid
+  cardsGrid: {
+    gap: Spacing.md,
+  },
+
+  // Portfolio Card
+  portfolioCard: {
+    borderRadius: BorderRadius.container,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+
+  portfolioCardGradient: {
+    flexDirection: 'row',
+  },
+
+  brandIndicator: {
+    width: 4,
+  },
+
+  portfolioCardContent: {
+    flex: 1,
+    padding: Spacing.md,
+  },
+
+  portfolioCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+
+  issuerLabel: {
+    ...Typography.labelSmall,
+    color: 'rgba(255,255,255,0.5)',
+    flex: 1,
+  },
+
+  yieldBadge: {
+    backgroundColor: 'rgba(0,255,133,0.15)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.badge,
+  },
+
+  yieldBadgeText: {
+    ...Typography.labelSmall,
+    color: '#00FF85',
+  },
+
+  cardNameSmall: {
+    ...Typography.bodyLarge,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: Spacing.sm,
+  },
+
+  portfolioCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  feeLabel: {
+    ...Typography.bodySmall,
+    color: 'rgba(255,255,255,0.6)',
+  },
+
+  typeLabel: {
+    ...Typography.labelSmall,
+    color: 'rgba(255,255,255,0.4)',
+    textTransform: 'capitalize',
+  },
+
+  // Footer
+  footer: {
+    marginTop: Spacing.xl,
+    paddingTop: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+  },
+
+  footerText: {
+    ...Typography.bodySmall,
+    color: 'rgba(255,255,255,0.3)',
+    textAlign: 'center',
+    maxWidth: 280,
   },
 });
