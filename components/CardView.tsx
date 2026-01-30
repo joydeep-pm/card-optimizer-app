@@ -63,6 +63,9 @@ export function CardView({ card, spendAmount = 10000 }: CardViewProps) {
           style={styles.gradientAccent}
         />
 
+        {/* Inner glow for OLED depth */}
+        <View style={styles.innerGlow} />
+
         {/* Card Content */}
         <View style={styles.content}>
           {/* Header Row */}
@@ -109,7 +112,7 @@ export function CardView({ card, spendAmount = 10000 }: CardViewProps) {
                 colors={['rgba(0,255,133,0.15)', 'rgba(0,255,133,0.05)']}
                 style={styles.savingsGradient}
               >
-                <ThemedText style={styles.savingsLabel} numberOfLines={1}>
+                <ThemedText style={styles.savingsLabel}>
                   YOU SAVE
                 </ThemedText>
                 <View style={styles.savingsRow}>
@@ -177,7 +180,7 @@ const styles = StyleSheet.create({
   glassBackground: {
     backgroundColor: Colors.dark.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.15)',
     overflow: 'hidden',
   },
 
@@ -193,8 +196,19 @@ const styles = StyleSheet.create({
     height: 120,
   },
 
+  innerGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(0,255,133,0.08)',
+  },
+
   content: {
-    padding: Spacing.lg,
+    padding: Spacing.md,
+    paddingTop: Spacing.lg,
   },
 
   // Header
@@ -222,6 +236,7 @@ const styles = StyleSheet.create({
     ...Typography.labelMedium,
     color: 'rgba(255,255,255,0.6)',
     flexShrink: 1,
+    maxWidth: '70%',
   },
 
   verdictBadge: {
@@ -241,13 +256,13 @@ const styles = StyleSheet.create({
   cardName: {
     ...Typography.headlineMedium,
     color: '#FFFFFF',
-    marginBottom: Spacing.lg,
-    flexShrink: 1,
+    marginBottom: Spacing.md,
   },
 
   // Yield Display
   yieldContainer: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
+    paddingBottom: 24,
   },
 
   yieldRow: {
@@ -256,21 +271,23 @@ const styles = StyleSheet.create({
   },
 
   yieldValue: {
-    fontSize: 72,
+    fontSize: 64,
     fontWeight: '800',
     color: '#00FF85',
-    letterSpacing: -3,
-    lineHeight: 80,
-    flexShrink: 1,
+    letterSpacing: -2,
+    lineHeight: 84,
+    paddingVertical: 10,
+    textShadowColor: 'rgba(0,255,133,0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
 
   yieldUnit: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
     color: '#00FF85',
     marginLeft: 4,
-    letterSpacing: -1,
-    flexShrink: 1,
+    letterSpacing: -0.5,
   },
 
   yieldLabel: {
@@ -281,13 +298,15 @@ const styles = StyleSheet.create({
 
   // INR Savings
   savingsContainer: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     borderRadius: BorderRadius.container,
     overflow: 'hidden',
   },
 
   savingsGradient: {
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(0,255,133,0.2)',
@@ -306,19 +325,19 @@ const styles = StyleSheet.create({
   },
 
   savingsCurrency: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
     color: '#FFFFFF',
+    lineHeight: 40,
     marginRight: 2,
-    flexShrink: 1,
   },
 
   savingsValue: {
-    fontSize: 40,
+    fontSize: 36,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: -1.5,
-    flexShrink: 1,
+    lineHeight: 40,
+    letterSpacing: -1,
   },
 
   savingsSubtext: {
@@ -332,7 +351,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(112,0,255,0.1)',
     borderRadius: BorderRadius.badge,
     padding: Spacing.sm,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     borderLeftWidth: 3,
     borderLeftColor: '#7000FF',
   },
@@ -348,7 +367,8 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.sm,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
   },
@@ -359,9 +379,9 @@ const styles = StyleSheet.create({
 
   footerDivider: {
     width: 1,
-    height: 32,
+    height: 28,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    marginHorizontal: Spacing.md,
+    marginHorizontal: Spacing.sm,
   },
 
   footerLabel: {

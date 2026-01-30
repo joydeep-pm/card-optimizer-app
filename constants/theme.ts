@@ -115,7 +115,7 @@ export const Typography = {
   headlineSmall: {
     fontSize: 20,
     fontWeight: '600' as const,
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
     lineHeight: 28,
   },
 
@@ -130,13 +130,13 @@ export const Typography = {
     fontSize: 15,
     fontWeight: '400' as const,
     letterSpacing: 0,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   bodySmall: {
     fontSize: 13,
     fontWeight: '400' as const,
     letterSpacing: 0,
-    lineHeight: 18,
+    lineHeight: 16,
   },
 
   // Labels
@@ -158,7 +158,7 @@ export const Typography = {
     fontSize: 10,
     fontWeight: '600' as const,
     letterSpacing: 1,
-    lineHeight: 14,
+    lineHeight: 16,
     textTransform: 'uppercase' as const,
   },
 };
